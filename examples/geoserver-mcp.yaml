@@ -1,0 +1,14 @@
+instances:
+  - id: production
+    base_url: https://geoserver.example.com/geoserver
+    auth:
+      type: basic
+      username_env: GEOSERVER_PROD_USER
+      password_env: GEOSERVER_PROD_PASSWORD
+    data_directory: /mnt/geoserver-prod-data
+  - id: staging
+    base_url: https://staging-geoserver.example.com/geoserver
+    auth:
+      type: basic
+      username_env: GEOSERVER_STAGING_USER
+      password_env: GEOSERVER_STAGING_PASSWORD

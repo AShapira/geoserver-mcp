@@ -1,0 +1,1 @@
+"""OGC service adapter boundary."""

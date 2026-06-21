@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.uv-cache/
 .coverage
 coverage.xml
 htmlcov/
@@ -37,6 +38,7 @@ secrets/
 /logs/
 
 # Docker/local runtime noise
+.docker-config/
 docker-compose.override.yml
 *.log
 

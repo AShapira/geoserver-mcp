@@ -1,0 +1,1 @@
+"""GeoServer REST adapter boundary."""

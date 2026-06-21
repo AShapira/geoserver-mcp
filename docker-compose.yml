@@ -1,0 +1,16 @@
+services:
+  geoserver-mcp:
+    build:
+      context: .
+    image: geoserver-mcp:dev
+    environment:
+      GEOSERVER_MCP_TRANSPORT: streamable-http
+      GEOSERVER_MCP_HOST: 0.0.0.0
+      GEOSERVER_MCP_PORT: "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
