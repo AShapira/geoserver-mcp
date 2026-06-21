@@ -5,6 +5,7 @@ description = "Dockerized MCP server for inspecting and managing GeoServer estat
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "httpx>=0.28,<1.0",
     "mcp>=1.27.1,<2.0.0",
     "pydantic>=2.13,<3.0",
     "pydantic-settings>=2.14,<3.0",
@@ -17,6 +18,7 @@ geoserver-mcp = "geoserver_mcp.__main__:main"
 [dependency-groups]
 dev = [
     "pytest>=8.4.0,<9.0.0",
+    "respx>=0.22,<1.0",
     "ruff>=0.11.0,<1.0.0",
 ]
 

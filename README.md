@@ -43,6 +43,30 @@ docker compose up --build
 
 The scaffold image runs as a non-root user and starts the package entrypoint. No GeoServer credentials, data directories, or instance configuration are required for this story.
 
+## Local GeoServer Fixture
+
+The repository includes a local-test-only GeoServer fixture behind the `fixture` Docker Compose profile. It uses a pinned OSGeo GeoServer image and exposes GeoServer on `127.0.0.1:8080`.
+
+Start the fixture:
+
+```powershell
+docker compose --profile fixture up geoserver-fixture
+```
+
+Run the gated integration test from another shell after GeoServer is ready:
+
+```powershell
+$env:GEOSERVER_MCP_RUN_FIXTURE_TESTS = "1"
+$env:GEOSERVER_FIXTURE_USER = "admin"
+$env:GEOSERVER_FIXTURE_PASSWORD = "geoserver"
+$env:GEOSERVER_FIXTURE_URL = "http://localhost:8080/geoserver"
+uv run pytest tests/integration/test_check_instances_geoserver_fixture.py
+```
+
+The `admin` / `geoserver` credentials are only for the local Docker fixture. Do not use default GeoServer credentials in production configuration. Production examples continue to use environment variable references and placeholder values.
+
+Use `http://localhost:8080/geoserver` for integration tests running on the host. Use `http://geoserver-fixture:8080/geoserver` only from containers attached to the same Compose network.
+
 ## Configuration
 
 GeoServer instances are described in a YAML config file. Credentials are referenced by environment variable name so secret values do not need to be written into the config file.
@@ -58,3 +82,5 @@ instances:
 ```
 
 See `examples/geoserver-mcp.yaml` and `examples/geoserver-mcp.env.example` for a two-instance example. Config loading validates required fields, duplicate instance IDs, and HTTP/HTTPS base URLs before any GeoServer network calls can be made. Secret values are redacted from normal displays, validation errors, and runtime credential representations.
+
+See `examples/geoserver-mcp.fixture.yaml` and `examples/geoserver-mcp.fixture.env.example` only for the local Docker fixture.

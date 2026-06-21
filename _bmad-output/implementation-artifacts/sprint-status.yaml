@@ -1,5 +1,5 @@
 # generated: 2026-05-27T15:27:51+03:00
-# last_updated: 2026-06-21T18:59:13+03:00
+# last_updated: 2026-06-21T19:43:43+03:00
 # project: geoserver-mcp
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,23 +35,23 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-27T15:27:51+03:00
-last_updated: 2026-06-21T18:59:13+03:00
+last_updated: 2026-06-21T19:43:43+03:00
 project: geoserver-mcp
 project_key: NOKEY
 tracking_system: file-system
 story_location: C:/Alex/work/geoserver-mcp/_bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-initialize-dockerized-python-mcp-server-scaffold: done
   1-2-load-multi-instance-configuration-and-secret-references: done
-  1-3-implement-safe-geoserver-http-client-for-read-only-access: backlog
-  1-4-expose-check-instances-mcp-tool: backlog
-  1-5-enforce-read-only-mcp-safety-boundary: backlog
-  1-6-add-initial-docker-compose-geoserver-fixture: backlog
+  1-3-implement-safe-geoserver-http-client-for-read-only-access: done
+  1-4-expose-check-instances-mcp-tool: done
+  1-5-enforce-read-only-mcp-safety-boundary: done
+  1-6-add-initial-docker-compose-geoserver-fixture: done
   epic-1-retrospective: optional
-  epic-2: backlog
-  2-1-list-configured-instance-inventory-summary: backlog
+  epic-2: in-progress
+  2-1-list-configured-instance-inventory-summary: done
   2-2-list-workspaces-across-instances: backlog
   2-3-list-stores-with-safe-metadata-redaction: backlog
   2-4-list-layers-and-layer-groups: backlog

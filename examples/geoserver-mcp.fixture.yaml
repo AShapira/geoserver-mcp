@@ -1,0 +1,11 @@
+# Local-test-only GeoServer fixture config.
+# Do not use these credentials or defaults for production deployments.
+# Host-run integration tests use http://localhost:8080/geoserver.
+# MCP containers on the Compose network should use http://geoserver-fixture:8080/geoserver.
+instances:
+  - id: local-fixture
+    base_url: http://localhost:8080/geoserver
+    auth:
+      type: basic
+      username_env: GEOSERVER_FIXTURE_USER
+      password_env: GEOSERVER_FIXTURE_PASSWORD

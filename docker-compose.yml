@@ -14,3 +14,13 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+
+  geoserver-fixture:
+    image: docker.osgeo.org/geoserver:2.28.2
+    profiles:
+      - fixture
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SKIP_DEMO_DATA: "false"
+    read_only: false
