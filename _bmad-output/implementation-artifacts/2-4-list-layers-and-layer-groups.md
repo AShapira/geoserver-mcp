@@ -1,6 +1,6 @@
 # Story 2.4: List Layers and Layer Groups
 
-Status: review
+Status: done
 
 ## Story
 
@@ -41,7 +41,11 @@ so that I can inspect what the GeoServer catalog publishes.
 
 ### Review Findings
 
-- None in this implementation pass.
+- [x] [Review][Patch] Malformed layer/group entries are silently dropped [src/geoserver_mcp/services/inventory_service.py:492] -- `_layer_item()` and `_layer_group_item()` return `None` for entries with missing or invalid names, and the extractors skip those entries while still reporting the endpoint operation as successful. A successful GeoServer response with partially malformed entries can silently omit catalog resources instead of surfacing a parse error or diagnostic warning.
+- [x] [Review][Patch] Malformed layer-group membership is erased as an empty relationship [src/geoserver_mcp/services/inventory_service.py:691] -- `_published_layer_names()` returns an empty list when `layers` or `publishables` has an unrecognized shape. That makes a layer group appear valid but empty, hiding broken or unsupported membership metadata without a finding.
+- [x] [Review][Patch] Layer/group href redaction misses credential-like query parameters [src/geoserver_mcp/services/inventory_service.py:573] -- `href` strings are only redacted by replacing configured basic-auth values. Query parameters such as `token=...`, `password=...`, or `api_key=...` with values not already known from runtime credentials can leak through inventory output.
+- [x] [Review][Patch] Layer-group resource IDs can collide when workspace is only present in href [src/geoserver_mcp/services/inventory_service.py:636] -- layer-group workspace derivation only checks explicit `workspace` metadata or a qualified `workspace:name`. Workspace-scoped layer groups that GeoServer identifies through `/workspaces/{workspace}/layergroups/...` hrefs can normalize to the same unqualified `resource_id`.
+- [x] [Review][Defer] Store inventory reuses redacted workspace names for REST calls [src/geoserver_mcp/services/inventory_service.py:175] -- deferred, pre-existing Story 2.3 behavior.
 
 ## Dev Notes
 
@@ -99,6 +103,9 @@ GPT-5 Codex
 - 2026-06-23: Focused tests passed: `.\.venv\Scripts\uv.exe run pytest tests\unit\test_geoserver_rest_client.py tests\unit\test_inventory_service.py tests\unit\test_mcp_list_catalog.py tests\unit\test_read_only_safety.py` with 41 passed.
 - 2026-06-23: Quality checks passed: `.\.venv\Scripts\uv.exe run ruff check src tests`, `.\.venv\Scripts\uv.exe run ruff format --check src tests`, and full `.\.venv\Scripts\uv.exe run pytest` with 79 passed / 1 skipped.
 - 2026-06-23: `git diff --check` reported only CRLF conversion warnings and no whitespace defects.
+- 2026-06-23: Code review found four patch items and one deferred Story 2.3 item.
+- 2026-06-23: Addressed all Story 2.4 review patch findings; focused tests passed for redaction, inventory service, and MCP `list_catalog`.
+- 2026-06-23: Final quality checks passed: full `.\.venv\Scripts\uv.exe run pytest` with 83 passed / 1 skipped, `ruff check src tests`, `ruff format src tests`, and `git diff --check` with only CRLF warnings.
 
 ### Completion Notes List
 
@@ -108,24 +115,32 @@ GPT-5 Codex
 - Extended `list_catalog` to support `resource_types=["layers"]` while keeping mixed resource requests unsupported.
 - Updated README MCP tool documentation.
 - Ignored repo-local `.tmp/` validation output used for Windows pytest/uv runs.
+- Added warning findings for malformed layer entries, layer-group entries, and malformed layer-group membership metadata.
+- Added URL query-parameter redaction for credential-like href parameters and derived layer-group workspace IDs from REST hrefs.
+- Deferred the pre-existing Story 2.3 redacted-workspace follow-up call issue to `deferred-work.md`.
 
 ### File List
 
 - .gitignore
 - README.md
 - _bmad-output/implementation-artifacts/2-4-list-layers-and-layer-groups.md
+- _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 - src/geoserver_mcp/adapters/geoserver_rest/client.py
 - src/geoserver_mcp/adapters/mcp/tools.py
 - src/geoserver_mcp/domain/__init__.py
 - src/geoserver_mcp/domain/catalog.py
+- src/geoserver_mcp/security/__init__.py
+- src/geoserver_mcp/security/redaction.py
 - src/geoserver_mcp/services/__init__.py
 - src/geoserver_mcp/services/inventory_service.py
 - tests/unit/test_geoserver_rest_client.py
 - tests/unit/test_inventory_service.py
 - tests/unit/test_mcp_list_catalog.py
+- tests/unit/test_redaction.py
 
 ### Change Log
 
 - 2026-06-23: Created Story 2.4 and started implementation.
 - 2026-06-23: Implemented, tested, and marked Story 2.4 ready for review.
+- 2026-06-23: Addressed code review findings and marked Story 2.4 done.

@@ -18,7 +18,7 @@ from geoserver_mcp.domain import (
     ToolResponse,
     WorkspaceInventoryItem,
 )
-from geoserver_mcp.security import redact_text
+from geoserver_mcp.security import redact_text, redact_url
 from geoserver_mcp.services.instance_service import ClientFactory, check_instances
 
 INSTANCE_SURFACE = "geoserver_rest:about_version"
@@ -270,7 +270,7 @@ async def list_layer_inventory(
                 message="unexpected GeoServer layer-group inventory failure",
             )
         if group_result.succeeded:
-            extracted_groups, group_parse_error = _extract_layer_group_items(
+            extracted_groups, group_findings, group_parse_error = _extract_layer_group_items(
                 instance.id,
                 group_result,
                 known_secrets,
@@ -278,6 +278,7 @@ async def list_layer_inventory(
             if group_parse_error is None:
                 successful_operations += 1
                 layer_groups.extend(extracted_groups)
+                findings.extend(group_findings)
             else:
                 failed_operations += 1
                 errors.append(_tool_error(instance.id, group_parse_error, known_secrets))
@@ -489,11 +490,23 @@ def _extract_layer_items(
 
     items: list[LayerInventoryItem] = []
     findings: list[dict[str, object]] = []
-    for entry in layer_entries:
+    for index, entry in enumerate(layer_entries):
         item, item_findings = _layer_item(instance_id, entry, known_secrets)
         if item is not None:
             items.append(item)
             findings.extend(item_findings)
+        else:
+            findings.append(
+                _catalog_finding(
+                    instance_id,
+                    "layer",
+                    f"entry[{index}]",
+                    (
+                        "Layer entry was skipped because required name metadata was "
+                        "unavailable or malformed."
+                    ),
+                )
+            )
     return items, findings, None
 
 
@@ -570,7 +583,7 @@ def _layer_item(
             default_style=_default_style(entry, known_secrets),
             store=store,
             resource=resource,
-            href=_redact(href, known_secrets) if href else None,
+            href=_redact_url(href, known_secrets) if href else None,
         ),
         findings,
     )
@@ -580,23 +593,41 @@ def _extract_layer_group_items(
     instance_id: str,
     result: GeoServerRestResult,
     known_secrets: Sequence[str],
-) -> tuple[list[LayerGroupInventoryItem], GeoServerRestResult | None]:
+) -> tuple[list[LayerGroupInventoryItem], list[dict[str, object]], GeoServerRestResult | None]:
     group_entries = _layer_group_entries(result.data)
     if group_entries is None:
-        return [], GeoServerRestResult(
-            status="failed",
-            reason_code=ReasonCode.PARSE_ERROR,
-            message="GeoServer layer-group response did not match the expected shape",
-            status_code=result.status_code,
-            url=result.url,
+        return (
+            [],
+            [],
+            GeoServerRestResult(
+                status="failed",
+                reason_code=ReasonCode.PARSE_ERROR,
+                message="GeoServer layer-group response did not match the expected shape",
+                status_code=result.status_code,
+                url=result.url,
+            ),
         )
 
     items: list[LayerGroupInventoryItem] = []
-    for entry in group_entries:
-        item = _layer_group_item(instance_id, entry, known_secrets)
+    findings: list[dict[str, object]] = []
+    for index, entry in enumerate(group_entries):
+        item, item_findings = _layer_group_item(instance_id, entry, known_secrets)
         if item is not None:
             items.append(item)
-    return items, None
+            findings.extend(item_findings)
+        else:
+            findings.append(
+                _catalog_finding(
+                    instance_id,
+                    "layer_group",
+                    f"entry[{index}]",
+                    (
+                        "Layer-group entry was skipped because required name metadata was "
+                        "unavailable or malformed."
+                    ),
+                )
+            )
+    return items, findings, None
 
 
 def _layer_group_entries(data: Mapping[str, Any] | None) -> list[Mapping[str, Any] | str] | None:
@@ -619,31 +650,50 @@ def _layer_group_item(
     instance_id: str,
     entry: Mapping[str, Any] | str,
     known_secrets: Sequence[str],
-) -> LayerGroupInventoryItem | None:
+) -> tuple[LayerGroupInventoryItem | None, list[dict[str, object]]]:
     if isinstance(entry, str):
         safe_name = _redact(entry, known_secrets)
         workspace = _workspace_from_name(safe_name)
-        return LayerGroupInventoryItem(
-            instance_id=instance_id,
-            name=safe_name,
-            resource_id=_resource_id(safe_name, workspace),
-            workspace=workspace,
+        return (
+            LayerGroupInventoryItem(
+                instance_id=instance_id,
+                name=safe_name,
+                resource_id=_resource_id(safe_name, workspace),
+                workspace=workspace,
+            ),
+            [],
         )
 
     raw_name = entry.get("name")
     if not isinstance(raw_name, str) or not raw_name:
-        return None
+        return None, []
     safe_name = _redact(raw_name, known_secrets)
-    workspace = _workspace_from_entry(entry, safe_name, known_secrets)
     raw_href = entry.get("href")
     href = raw_href if isinstance(raw_href, str) and raw_href else None
-    return LayerGroupInventoryItem(
-        instance_id=instance_id,
-        name=safe_name,
-        resource_id=_resource_id(safe_name, workspace),
-        workspace=workspace,
-        layers=_published_layer_names(entry, known_secrets),
-        href=_redact(href, known_secrets) if href else None,
+    workspace = _workspace_from_entry(entry, safe_name, known_secrets) or (
+        _workspace_from_href(href) if href else None
+    )
+    layers, malformed_membership = _published_layer_names(entry, known_secrets)
+    findings: list[dict[str, object]] = []
+    if malformed_membership:
+        findings.append(
+            _catalog_finding(
+                instance_id,
+                "layer_group",
+                _resource_id(safe_name, workspace),
+                "Layer-group membership metadata was unavailable or malformed.",
+            )
+        )
+    return (
+        LayerGroupInventoryItem(
+            instance_id=instance_id,
+            name=safe_name,
+            resource_id=_resource_id(safe_name, workspace),
+            workspace=workspace,
+            layers=layers,
+            href=_redact_url(href, known_secrets) if href else None,
+        ),
+        findings,
     )
 
 
@@ -661,6 +711,16 @@ def _workspace_from_name(name: str) -> str | None:
         return None
     workspace, _ = name.split(":", 1)
     return workspace or None
+
+
+def _workspace_from_href(href: str) -> str | None:
+    parts = href.split("/")
+    for index, part in enumerate(parts):
+        if part == "workspaces" and index + 1 < len(parts):
+            workspace = parts[index + 1]
+            if workspace:
+                return workspace.removesuffix(".json")
+    return None
 
 
 def _resource_id(name: str, workspace: str | None) -> str:
@@ -691,17 +751,20 @@ def _default_style(entry: Mapping[str, Any], known_secrets: Sequence[str]) -> st
 def _published_layer_names(
     entry: Mapping[str, Any],
     known_secrets: Sequence[str],
-) -> list[str]:
+) -> tuple[list[str], bool]:
     candidates = (entry.get("layers"), entry.get("publishables"))
     for candidate in candidates:
+        if candidate is None:
+            continue
         entries = _reference_entries(candidate)
         if entries is not None:
             return [
                 layer
                 for raw_entry in entries
                 if (layer := _named_reference(raw_entry, known_secrets)) is not None
-            ]
-    return []
+            ], False
+        return [], True
+    return [], False
 
 
 def _reference_entries(value: object) -> list[Mapping[str, Any] | str] | None:
@@ -753,6 +816,22 @@ def _related_resource_finding(
     }
 
 
+def _catalog_finding(
+    instance_id: str,
+    resource_type: str,
+    resource_name: str,
+    message: str,
+) -> dict[str, object]:
+    return {
+        "severity": "warning",
+        "reason_code": ReasonCode.PARTIAL_RESULT.value,
+        "instance_id": instance_id,
+        "resource": {"type": resource_type, "name": resource_name},
+        "message": message,
+        "suggested_next_step": "Inspect catalog resource detail when that story is available.",
+    }
+
+
 def _catalog_status(successful_count: int, total_count: int) -> ResponseStatus:
     if successful_count == total_count:
         return ResponseStatus.SUCCESS
@@ -792,3 +871,7 @@ def _known_secret_values(runtime_config: RuntimeConfig) -> tuple[str, ...]:
 
 def _redact(value: str, known_secrets: Sequence[str]) -> str:
     return redact_text(value, known_secrets)
+
+
+def _redact_url(value: str, known_secrets: Sequence[str]) -> str:
+    return redact_url(value, known_secrets)

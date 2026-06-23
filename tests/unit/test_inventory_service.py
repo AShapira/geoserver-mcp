@@ -540,3 +540,161 @@ async def test_list_layer_inventory_maps_malformed_layer_response_to_parse_error
     assert response.status == ResponseStatus.PARTIAL
     assert response.errors[0].instance_id == "production"
     assert response.errors[0].reason_code == ReasonCode.PARSE_ERROR
+
+
+@pytest.mark.anyio
+async def test_list_layer_inventory_warns_for_malformed_layer_and_group_entries() -> None:
+    layer_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={"layers": {"layer": [{"href": "https://prod.example.com/no-name"}]}},
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layers.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layers": {"layer": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layers.json",
+        ),
+    }
+    layer_group_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={"layerGroups": {"layerGroup": [{"href": "https://prod.example.com/no-name"}]}},
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layergroups.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layerGroups": {"layerGroup": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layergroups.json",
+        ),
+    }
+
+    response = await list_layer_inventory(
+        runtime_config(),
+        client_factory=layer_client_factory(layer_results, layer_group_results),
+    )
+
+    assert response.status == ResponseStatus.SUCCESS
+    assert response.data["layers"] == []
+    assert response.data["layer_groups"] == []
+    assert [
+        (finding["resource"]["type"], finding["resource"]["name"]) for finding in response.findings
+    ] == [
+        ("layer", "entry[0]"),
+        ("layer_group", "entry[0]"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_list_layer_inventory_warns_for_malformed_layer_group_membership() -> None:
+    layer_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={"layers": {"layer": []}},
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layers.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layers": {"layer": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layers.json",
+        ),
+    }
+    layer_group_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={
+                "layerGroups": {"layerGroup": [{"name": "broken", "layers": {"unexpected": []}}]}
+            },
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layergroups.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layerGroups": {"layerGroup": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layergroups.json",
+        ),
+    }
+
+    response = await list_layer_inventory(
+        runtime_config(),
+        client_factory=layer_client_factory(layer_results, layer_group_results),
+    )
+
+    assert response.status == ResponseStatus.SUCCESS
+    assert response.data["layer_groups"][0].name == "broken"
+    assert response.data["layer_groups"][0].layers == []
+    assert response.findings[0]["resource"] == {"type": "layer_group", "name": "broken"}
+    assert response.findings[0]["message"] == (
+        "Layer-group membership metadata was unavailable or malformed."
+    )
+
+
+@pytest.mark.anyio
+async def test_list_layer_inventory_redacts_href_query_secrets_and_group_workspace() -> None:
+    layer_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={
+                "layers": {
+                    "layer": [
+                        {
+                            "name": "states",
+                            "href": "https://prod.example.com/geoserver/rest/layers/states.json?token=abc123&format=json",
+                        }
+                    ]
+                }
+            },
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layers.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layers": {"layer": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layers.json",
+        ),
+    }
+    layer_group_results = {
+        "production": GeoServerRestResult(
+            status="success",
+            data={
+                "layerGroups": {
+                    "layerGroup": [
+                        {
+                            "name": "basemap",
+                            "href": "https://prod.example.com/geoserver/rest/workspaces/topp/layergroups/basemap.json?password=hidden",
+                        }
+                    ]
+                }
+            },
+            status_code=200,
+            url="https://prod.example.com/geoserver/rest/layergroups.json",
+        ),
+        "staging": GeoServerRestResult(
+            status="success",
+            data={"layerGroups": {"layerGroup": []}},
+            status_code=200,
+            url="https://staging.example.com/geoserver/rest/layergroups.json",
+        ),
+    }
+
+    response = await list_layer_inventory(
+        runtime_config(),
+        client_factory=layer_client_factory(layer_results, layer_group_results),
+    )
+    serialized = str(response.model_dump(mode="json"))
+
+    assert response.status == ResponseStatus.SUCCESS
+    assert "abc123" not in serialized
+    assert "hidden" not in serialized
+    assert "token=[REDACTED]" in serialized
+    assert "password=[REDACTED]" in serialized
+    assert response.data["layer_groups"][0].workspace == "topp"
+    assert response.data["layer_groups"][0].resource_id == "topp:basemap"

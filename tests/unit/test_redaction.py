@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from geoserver_mcp.security import REDACTION, redact_text, redact_value
+from geoserver_mcp.security import REDACTION, redact_text, redact_url, redact_value
 
 
 def test_redact_text_replaces_known_secret_values() -> None:
@@ -49,3 +49,14 @@ def test_redact_value_recursively_replaces_known_secret_text() -> None:
     redacted = redact_value(value, ["operator-password"])
 
     assert redacted == {"detail": [f"{REDACTION} appeared in an adapter error"]}
+
+
+def test_redact_url_masks_credential_like_query_parameters() -> None:
+    url = "https://example.com/geoserver/rest/layers/topp:states.json?token=abc&password=hidden&format=json"
+
+    redacted = redact_url(url)
+
+    assert redacted == (
+        "https://example.com/geoserver/rest/layers/topp:states.json?"
+        f"token={REDACTION}&password={REDACTION}&format=json"
+    )
