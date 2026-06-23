@@ -35,6 +35,7 @@ secrets/
 /geoserver-data/
 /geoserver_data/
 /tmp/
+/.tmp/
 /logs/
 
 # Docker/local runtime noise

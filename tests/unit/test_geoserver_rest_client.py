@@ -53,6 +53,91 @@ async def test_connectivity_request_uses_get_basic_auth_timeout_and_no_redirects
 
 
 @pytest.mark.anyio
+async def test_list_workspaces_uses_geoserver_rest_workspace_endpoint() -> None:
+    transport = CaptureTransport(
+        httpx.Response(200, json={"workspaces": {"workspace": [{"name": "topp"}]}})
+    )
+    client = GeoServerRestClient(runtime_instance(), transport=transport)
+
+    result = await client.list_workspaces()
+
+    assert result.succeeded
+    assert len(transport.requests) == 1
+    assert transport.requests[0].method == "GET"
+    assert str(transport.requests[0].url) == (
+        "https://geoserver.example.com/geoserver/rest/workspaces.json"
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "store_type, expected_endpoint",
+    [
+        ("data_stores", "datastores"),
+        ("coverage_stores", "coveragestores"),
+        ("wms_stores", "wmsstores"),
+    ],
+)
+async def test_list_stores_uses_workspace_store_endpoints(
+    store_type: str,
+    expected_endpoint: str,
+) -> None:
+    transport = CaptureTransport(httpx.Response(200, json={"dataStores": {"dataStore": []}}))
+    client = GeoServerRestClient(runtime_instance(), transport=transport)
+
+    result = await client.list_stores("topp", store_type)
+
+    assert result.succeeded
+    assert len(transport.requests) == 1
+    assert transport.requests[0].method == "GET"
+    assert str(transport.requests[0].url) == (
+        f"https://geoserver.example.com/geoserver/rest/workspaces/topp/{expected_endpoint}.json"
+    )
+
+
+@pytest.mark.anyio
+async def test_list_stores_rejects_unsupported_store_type_before_network_access() -> None:
+    transport = CaptureTransport(httpx.Response(200, json={"unexpected": True}))
+    client = GeoServerRestClient(runtime_instance(), transport=transport)
+
+    result = await client.list_stores("topp", "unknown")
+
+    assert not result.succeeded
+    assert result.reason_code == ReasonCode.UNSUPPORTED_ENDPOINT
+    assert transport.requests == []
+
+
+@pytest.mark.anyio
+async def test_list_layers_uses_geoserver_rest_layers_endpoint() -> None:
+    transport = CaptureTransport(httpx.Response(200, json={"layers": {"layer": []}}))
+    client = GeoServerRestClient(runtime_instance(), transport=transport)
+
+    result = await client.list_layers()
+
+    assert result.succeeded
+    assert len(transport.requests) == 1
+    assert transport.requests[0].method == "GET"
+    assert str(transport.requests[0].url) == (
+        "https://geoserver.example.com/geoserver/rest/layers.json"
+    )
+
+
+@pytest.mark.anyio
+async def test_list_layer_groups_uses_geoserver_rest_layergroups_endpoint() -> None:
+    transport = CaptureTransport(httpx.Response(200, json={"layerGroups": {"layerGroup": []}}))
+    client = GeoServerRestClient(runtime_instance(), transport=transport)
+
+    result = await client.list_layer_groups()
+
+    assert result.succeeded
+    assert len(transport.requests) == 1
+    assert transport.requests[0].method == "GET"
+    assert str(transport.requests[0].url) == (
+        "https://geoserver.example.com/geoserver/rest/layergroups.json"
+    )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "target",
     [

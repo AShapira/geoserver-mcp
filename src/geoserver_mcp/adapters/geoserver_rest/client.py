@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
@@ -13,6 +13,11 @@ from geoserver_mcp.security import redact_text, redact_value
 
 REST_VERSION_ENDPOINT = "rest/about/version.json"
 DEFAULT_TIMEOUT_SECONDS = 5.0
+STORE_ENDPOINTS = {
+    "data_stores": "datastores",
+    "coverage_stores": "coveragestores",
+    "wms_stores": "wmsstores",
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,25 @@ class GeoServerRestClient:
 
     async def get_connectivity_metadata(self) -> GeoServerRestResult:
         return await self.get_json(REST_VERSION_ENDPOINT)
+
+    async def list_workspaces(self) -> GeoServerRestResult:
+        return await self.get_json("rest/workspaces.json")
+
+    async def list_stores(self, workspace: str, store_type: str) -> GeoServerRestResult:
+        endpoint = STORE_ENDPOINTS.get(store_type)
+        if endpoint is None:
+            return self._failure(
+                ReasonCode.UNSUPPORTED_ENDPOINT,
+                "unsupported GeoServer store type",
+            )
+        safe_workspace = quote(workspace, safe="")
+        return await self.get_json(f"rest/workspaces/{safe_workspace}/{endpoint}.json")
+
+    async def list_layers(self) -> GeoServerRestResult:
+        return await self.get_json("rest/layers.json")
+
+    async def list_layer_groups(self) -> GeoServerRestResult:
+        return await self.get_json("rest/layergroups.json")
 
     async def get_json(self, target: str) -> GeoServerRestResult:
         target_url = self._build_safe_url(target)
